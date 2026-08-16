@@ -14,7 +14,23 @@ def _seeded_random():
     random.seed(0)
 
 
-def test_small_pet_walks_left_and_right():
+@pytest.fixture(autouse=True)
+def _isolated_state_files(tmp_path, monkeypatch):
+    # Every test gets its own empty CMD_FILE/EXIT_FILE by default, so none of
+    # them accidentally read the real ~/.terminal_pet/lastcmd on the machine
+    # running the tests (which is live and reacts to whatever command was
+    # actually run last). Tests that specifically exercise check_command()/
+    # check_exit() override these further with their own tmp files.
+    monkeypatch.setattr(pet, "CMD_FILE", str(tmp_path / "lastcmd"))
+    monkeypatch.setattr(pet, "EXIT_FILE", str(tmp_path / "lastexit"))
+
+
+def test_small_pet_walks_left_and_right(monkeypatch):
+    # Pin random.random() above the sit/chatter/star thresholds so this test
+    # exercises only the deterministic walk/bounce logic, regardless of how
+    # many random() calls anything else in update() happens to make per tick.
+    monkeypatch.setattr(random, "random", lambda: 0.99)
+
     p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
     xs = set()
     for _ in range(300):

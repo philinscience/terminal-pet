@@ -222,6 +222,30 @@ PETS = {
 BUBBLE_PALETTE_256 = [51, 213, 226, 118, 208, 201]
 BUBBLE_PALETTE_8 = [COLOR_CYAN, COLOR_MAGENTA, COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_MAGENTA]
 
+# --- time-aware moods ---
+SLEEPY_SAYINGS = ["*yawns*", "zzz...", "getting sleepy...", "*rubs eyes*", "past my bedtime..."]
+NIGHT_START_HOUR = 23  # from 11pm...
+NIGHT_END_HOUR = 6  # ...to 6am, the pet gets sleepy: fewer chatter lines, more idling, slower wiggle.
+
+# (month, day) -> flavor for that one day of the year. Takes priority over
+# the sleepy/encouragement pools, and gives the pet a themed color for the
+# session.
+SPECIAL_DATES = {
+    (1, 1): {"sayings": ["happy new year!", "*confetti everywhere*", "new year, new bugs to fix"], "color256": 226, "color8": COLOR_YELLOW},
+    (2, 14): {"sayings": ["happy valentine's!", "*heart eyes*", "you're my favorite human"], "color256": 201, "color8": COLOR_MAGENTA},
+    (10, 31): {"sayings": ["*spooky noises*", "boo!", "trick or treat?"], "color256": 208, "color8": COLOR_RED},
+}
+
+# --- rare easter eggs ---
+GOLDEN_CHANCE = 0.02  # ~1 in 50 launches: a shiny, differently-colored pet for the session.
+GOLDEN_COLOR256 = 214
+GOLDEN_COLOR8 = COLOR_GREEN
+GOLDEN_SAYING = "*sparkles* ...lucky find!"
+
+STAR_CHANCE_PER_TICK = 1 / 1500  # roughly once every few minutes of continuous running
+STAR_SPEED = 2.5
+STAR_ROW_FRACTION = 0.15  # a shooting star crosses near the top of the screen
+
 
 class Pet:
     def __init__(self, kind, max_x, max_y, speed, bubble_pairs):
@@ -253,6 +277,36 @@ class Pet:
         self._cmd_mtime = None
         self._exit_mtime = None
         self.last_cmd = ""
+
+        self.golden = random.random() < GOLDEN_CHANCE
+        self.special_info = self._special_date_info()
+        self.festive = self.special_info is not None
+        self.star_x = None
+        self.star_y = None
+        if self.golden:
+            self._set_bubble(GOLDEN_SAYING, 20)
+        elif self.festive:
+            self._set_bubble(random.choice(self.special_info["sayings"]), 20)
+
+    def _is_night(self):
+        hour = time.localtime().tm_hour
+        if NIGHT_START_HOUR > NIGHT_END_HOUR:
+            return hour >= NIGHT_START_HOUR or hour < NIGHT_END_HOUR
+        return NIGHT_START_HOUR <= hour < NIGHT_END_HOUR
+
+    def _special_date_info(self):
+        now = time.localtime()
+        return SPECIAL_DATES.get((now.tm_mon, now.tm_mday))
+
+    def _chatter_pool(self):
+        pool = list(self.spec["sayings"])
+        if self.festive:
+            pool += self.special_info["sayings"]
+        elif self._is_night():
+            pool += SLEEPY_SAYINGS
+        else:
+            pool += ENCOURAGEMENTS
+        return pool
 
     def _set_bubble(self, text, timer):
         self.bubble = text
@@ -328,10 +382,22 @@ class Pet:
         self.state = "sit"
         self.state_timer = 14
 
+    def _update_star(self):
+        if self.star_x is None:
+            if random.random() < STAR_CHANCE_PER_TICK:
+                self.star_x = 0.0
+                self.star_y = max(0, int(self.max_y * STAR_ROW_FRACTION))
+            return
+        self.star_x += STAR_SPEED
+        if self.star_x >= self.max_x:
+            self.star_x = None
+            self.star_y = None
+
     def update(self):
         self.tick += 1
         self.check_command()
         self.check_exit()
+        self._update_star()
 
         if self.bubble_timer > 0:
             self.bubble_timer -= 1
@@ -343,8 +409,7 @@ class Pet:
             # stays put and gently wiggles in place; still reacts to
             # commands/feeding via speech bubble, just never walks.
             if self.bubble is None and random.random() < 0.015:
-                pool = self.spec["sayings"] + ENCOURAGEMENTS
-                self._set_bubble(random.choice(pool), 10)
+                self._set_bubble(random.choice(self._chatter_pool()), 10)
             return
 
         if self.state == "sit":
@@ -354,16 +419,16 @@ class Pet:
                 self.direction = random.choice([-1, 1])
             return
 
-        # occasionally stop to sit/idle
-        if random.random() < 0.01:
+        # occasionally stop to sit/idle — sleepier (idles more) late at night
+        sit_chance = 0.03 if self._is_night() else 0.01
+        if random.random() < sit_chance:
             self.state = "sit"
             self.state_timer = random.randint(15, 40)
             return
 
-        # occasionally say something (species chatter, or a random encouragement)
+        # occasionally say something (species chatter, encouragement, or a mood-appropriate line)
         if self.bubble is None and random.random() < 0.015:
-            pool = self.spec["sayings"] + ENCOURAGEMENTS
-            self._set_bubble(random.choice(pool), 10)
+            self._set_bubble(random.choice(self._chatter_pool()), 10)
 
         self.x += self.direction * self.speed
         if self.x <= 0:
@@ -380,8 +445,9 @@ class Pet:
     def y_offset(self):
         if self.large:
             # slow, gentle bob — independent of walk/sit state, since large
-            # pets never walk.
-            return -1 if (self.tick // 10) % 2 == 0 else 0
+            # pets never walk. Slower still late at night (drowsy).
+            cadence = 20 if self._is_night() else 10
+            return -1 if (self.tick // cadence) % 2 == 0 else 0
         if self.state == "walk" and (self.tick // 6) % 2 == 0:
             return -1
         return 0
@@ -403,7 +469,15 @@ def draw(stdscr, pet, pet_pair):
             except curses.error:
                 pass
 
-    if pet.sparkle:
+    if pet.star_x is not None:
+        sx, sy = int(pet.star_x), pet.star_y
+        if 0 <= sy < max_y - 1 and 0 <= sx < max_x:
+            try:
+                stdscr.addstr(sy, sx, "*", curses.A_BOLD)
+            except curses.error:
+                pass
+
+    if pet.sparkle or pet.golden or pet.festive:
         mid_row = y + max(0, pet.height // 2)
         for sx, ch in ((x - 2, "*"), (x + pet.width + 1, "*")):
             if 0 <= mid_row < max_y - 1 and 0 <= sx < max_x:
@@ -436,6 +510,11 @@ def main(stdscr, kind, speed):
     stdscr.nodelay(True)
     stdscr.timeout(max(20, int(120 / speed)))
 
+    max_y, max_x = stdscr.getmaxyx()
+    # Constructed before color setup below so pet.golden/pet.special_info
+    # (rolled/looked-up in __init__) can pick the pet's color for this run.
+    pet = Pet(kind, max_x, max_y, speed=1.0, bubble_pairs=[])
+
     pet_pair = 1
     bubble_pairs = []
     if curses.has_colors():
@@ -443,7 +522,12 @@ def main(stdscr, kind, speed):
         curses.use_default_colors()
         use_256 = curses.COLORS >= 256
 
-        pet_color = PETS[kind]["color256"] if use_256 else PETS[kind]["color8"]
+        if pet.golden:
+            pet_color = GOLDEN_COLOR256 if use_256 else GOLDEN_COLOR8
+        elif pet.special_info:
+            pet_color = pet.special_info["color256"] if use_256 else pet.special_info["color8"]
+        else:
+            pet_color = PETS[kind]["color256"] if use_256 else PETS[kind]["color8"]
         curses.init_pair(pet_pair, pet_color, -1)
 
         palette = BUBBLE_PALETTE_256 if use_256 else BUBBLE_PALETTE_8
@@ -451,8 +535,11 @@ def main(stdscr, kind, speed):
             curses.init_pair(i, color, -1)
             bubble_pairs.append(i)
 
-    max_y, max_x = stdscr.getmaxyx()
-    pet = Pet(kind, max_x, max_y, speed=1.0, bubble_pairs=bubble_pairs)
+        pet.bubble_pairs = bubble_pairs
+        if pet.bubble and bubble_pairs:
+            # golden/festive pets set an intro bubble in __init__, before
+            # bubble_pairs existed — re-roll its color now that they do.
+            pet.bubble_pair = random.choice(bubble_pairs)
 
     while True:
         ch = stdscr.getch()
