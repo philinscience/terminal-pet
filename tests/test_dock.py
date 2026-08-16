@@ -1,0 +1,39 @@
+"""Tests for dock.py's pure logic: command quoting and the per-pet square
+window size calculation. Doesn't touch AppleScript/osascript at all.
+"""
+
+from terminal_pet import dock, pet
+
+
+def test_pet_command_quotes_paths_with_spaces(monkeypatch):
+    monkeypatch.setattr(dock.shutil, "which", lambda name: "/opt/my apps/terminal-pet")
+    cmd = dock._pet_command(["--pet", "duck", "--speed", "1.0"])
+    assert cmd == "'/opt/my apps/terminal-pet' --pet duck --speed 1.0"
+
+
+def test_pet_command_falls_back_to_module_invocation(monkeypatch):
+    monkeypatch.setattr(dock.shutil, "which", lambda name: None)
+    cmd = dock._pet_command(["--pet", "bunny"])
+    assert "terminal_pet.pet" in cmd
+    assert "--pet bunny" in cmd
+
+
+def test_large_window_size_scales_with_art_dimensions():
+    bunny_size = dock._large_window_size("bunny")
+    raccoon_size = dock._large_window_size("raccoon")
+
+    # Raccoon's art is bigger in both dimensions than bunny's, so it should
+    # get a bigger (or equal) square window.
+    assert raccoon_size >= bunny_size
+    assert raccoon_size >= dock.MIN_LARGE_WINDOW_SIZE
+    assert bunny_size >= dock.MIN_LARGE_WINDOW_SIZE
+
+
+def test_large_window_size_fits_the_art():
+    for name in ("bunny", "raccoon"):
+        art = pet.PETS[name]["art"]
+        width_chars = max(len(line) for line in art)
+        height_chars = len(art)
+        size = dock._large_window_size(name)
+        assert size >= width_chars * dock.CHAR_W_PX
+        assert size >= height_chars * dock.CHAR_H_PX
