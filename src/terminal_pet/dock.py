@@ -7,10 +7,20 @@ Small pets (duck, mouse) get a compact pane/window:
     Python API isn't available (AppleScript alone can't set a custom ratio).
   - Terminal.app: opens a small separate window in the bottom-right corner of the
     screen (Terminal.app has no split-pane support).
+  - tmux (any platform, e.g. SSH'd into a Linux box from a Mac): the
+    AppleScript/iTerm2-API paths above only work because they control the
+    terminal *application* itself, which has to run on the same machine as
+    your eyeballs. Over SSH the pet process is on the remote box and has no
+    way to reach back and drive your local terminal app. tmux sidesteps this
+    entirely — a split pane is just terminal output multiplexed over the
+    same SSH stream, so it renders inside whatever window you're already
+    looking at. Used whenever $TMUX is set (i.e. --dock is run from inside a
+    tmux session) and the mac-native paths above don't apply.
 
 Large pets (bunny, and any future pet marked "size": "large" in pet.PETS)
-always get their own separate square window in the bottom-right corner of the
-screen instead, on both iTerm2 and Terminal.app.
+always get their own separate square window instead, on iTerm2 and
+Terminal.app; under tmux they get their own tmux window (not sized/square,
+since tmux windows fill the terminal).
 
 Anything else: runs it directly in the current window.
 """
@@ -194,11 +204,37 @@ def _launch_iterm(pet_argv, dock_height_percent):
         _launch_iterm_applescript(cmd)
 
 
+def _in_tmux():
+    return bool(os.environ.get("TMUX")) and shutil.which("tmux") is not None
+
+
+def _launch_tmux_pane(pet_argv, dock_height_percent):
+    cmd = _pet_command(pet_argv)
+    # -d keeps focus on your current pane ("keep working normally"); -l NN%
+    # sizes the new pane as a percentage of the window (tmux >= 2.9; older
+    # tmux only understands the now-deprecated -p NN, not handled here).
+    subprocess.run(
+        ["tmux", "split-window", "-d", "-v", "-l", f"{dock_height_percent:.0f}%", cmd],
+        check=True,
+    )
+    print(f"Pet pane launched below your current pane (~{dock_height_percent:.0f}% of window height, tmux).")
+    print("(Pass --dock-height PERCENT to change it.)")
+
+
+def _launch_tmux_window(pet_argv):
+    cmd = _pet_command(pet_argv)
+    subprocess.run(["tmux", "new-window", "-d", "-n", "pet", cmd], check=True)
+    print("Pet launched in a new tmux window named 'pet'.")
+    print("Switch to it with `tmux select-window -t pet` (or prefix + w).")
+
+
 def _run_inline(pet_argv):
     if sys.platform == "darwin":
         print(f"Unrecognized terminal (TERM_PROGRAM={os.environ.get('TERM_PROGRAM', '')!r}).")
+    elif shutil.which("tmux") is None:
+        print("Docking on Linux needs tmux — install it and run --dock from inside a tmux session.")
     else:
-        print("Docking (a separate pane/window) is currently macOS-only.")
+        print("Not inside a tmux session — start one with `tmux` and rerun --dock for a docked pane.")
     print("Running the pet directly in this window instead.")
     sys.argv = ["terminal-pet", *pet_argv]
     from . import pet as pet_module
@@ -217,6 +253,9 @@ def _launch_large_window(pet, pet_argv):
     elif term_program == "Apple_Terminal":
         script = TERMINAL_SCRIPT.format(cmd=cmd, win_w=size, win_h=size)
         subprocess.run(["osascript", "-e", script], check=True)
+    elif _in_tmux():
+        _launch_tmux_window(pet_argv)
+        return
     else:
         _run_inline(pet_argv)
         return
@@ -243,6 +282,9 @@ def launch(pet, speed, dock_height_percent=15.0):
         script = TERMINAL_SMALL_SCRIPT.format(cmd=cmd, win_w=380, win_h=260)
         subprocess.run(["osascript", "-e", script], check=True)
         print("Pet launched, enjoy <3")
+
+    elif _in_tmux():
+        _launch_tmux_pane(pet_argv, dock_height_percent)
 
     else:
         _run_inline(pet_argv)

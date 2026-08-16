@@ -24,21 +24,23 @@ Open a new terminal tab (or `source ~/.zshrc` / `source ~/.bashrc`) and type a t
 
 Pets come in two sizes:
 - **Small** (duck, mouse): wander back and forth, docked in a small pane
-  (iTerm2) or small window (Terminal.app).
+  (iTerm2, Terminal.app, or tmux) or small window (Terminal.app).
 - **Large** (bunny, raccoon): sits in place with a gentle up/down wiggle,
-  always in its own separate square window — on both iTerm2 and Terminal.app,
-  sized to fit that pet's art.
+  always in its own separate window — a square window sized to fit that
+  pet's art on iTerm2/Terminal.app, or a new tmux window.
 
 ## Platform support
 
 - **macOS**: fully supported, including `--dock` (a separate pane/window)
   in iTerm2 and Terminal.app.
 - **Linux**: the pet itself works fine (same `curses` machinery as macOS),
-  and the command-reaction hook supports both zsh and bash. `--dock` isn't
-  implemented — there's no single scripting story across Linux terminal
-  emulators the way AppleScript covers iTerm2/Terminal.app, so `--dock` just
-  falls back to running the pet directly in your current window instead of
-  erroring.
+  and the command-reaction hook supports both zsh and bash. `--dock` works
+  if you're inside a tmux session (`tmux split-window` for small pets, a new
+  tmux window for large ones) — this is also what makes docking work when
+  you SSH into a Linux box from a Mac, since the AppleScript/iTerm2-API
+  tricks can only ever control the terminal app on your local machine, not
+  a remote process. Outside tmux, `--dock` falls back to running the pet
+  directly in your current window instead of erroring.
 - **Windows**: not supported. Stock Windows Python doesn't ship `curses` at
   all (you'd need `pip install windows-curses`, and even then rendering and
   the shell hook would need real testing this project hasn't had) — running

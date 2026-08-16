@@ -37,3 +37,36 @@ def test_large_window_size_fits_the_art():
         size = dock._large_window_size(name)
         assert size >= width_chars * dock.CHAR_W_PX
         assert size >= height_chars * dock.CHAR_H_PX
+
+
+def test_in_tmux_requires_both_env_and_binary(monkeypatch):
+    monkeypatch.setattr(dock.shutil, "which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+    assert dock._in_tmux() is True
+
+    monkeypatch.delenv("TMUX", raising=False)
+    assert dock._in_tmux() is False
+
+    monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+    monkeypatch.setattr(dock.shutil, "which", lambda name: None)
+    assert dock._in_tmux() is False
+
+
+def test_launch_tmux_pane_splits_with_percent_height(monkeypatch):
+    calls = []
+    monkeypatch.setattr(dock.subprocess, "run", lambda args, **kw: calls.append(args))
+    monkeypatch.setattr(dock, "_pet_command", lambda argv: "terminal-pet --pet duck")
+
+    dock._launch_tmux_pane(["--pet", "duck"], 20.0)
+
+    assert calls == [["tmux", "split-window", "-d", "-v", "-l", "20%", "terminal-pet --pet duck"]]
+
+
+def test_launch_tmux_window_names_pane(monkeypatch):
+    calls = []
+    monkeypatch.setattr(dock.subprocess, "run", lambda args, **kw: calls.append(args))
+    monkeypatch.setattr(dock, "_pet_command", lambda argv: "terminal-pet --pet bunny")
+
+    dock._launch_tmux_window(["--pet", "bunny"])
+
+    assert calls == [["tmux", "new-window", "-d", "-n", "pet", "terminal-pet --pet bunny"]]
