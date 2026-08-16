@@ -7,6 +7,8 @@ actually useful: type `gti status` and it pops up a speech bubble —
 It also comments on what you're running, roasts you (gently) when something
 fails for real, and throws in random encouragement.
 
+![demo](assets/demo.gif)
+
 ## Quick start
 
 ```

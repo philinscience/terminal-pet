@@ -164,6 +164,10 @@ BUNNY_ART = [
     "⠀⠀⠀⠀⠀⠉⠛⠛⠛⠋⠁⠀⠀⠀⢿⣦⠀⠀⠀⠀⠀⣠⡾⠁⠀⠀⠀⠀⠀⠀⠀⠀",
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣶⣤⣀⣦⣴⡟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀",
 ]
+# Some fonts render "blank" braille (U+2800) with a faint cell outline
+# instead of true whitespace — swap it for a real space so it's blank
+# everywhere, no matter the font.
+BUNNY_ART = [line.replace("⠀", " ") for line in BUNNY_ART]
 BUNNY_SAYINGS = ["<3", "*wiggles happily*", "hi!!", "*happy little bounce*", "eee!"]
 BUNNY_FED = ["yay, thank you!! <3", "*happy squish*", "nom nom <3"]
 
@@ -198,6 +202,7 @@ RACCOON_ART = [
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠛⠷⣦⣤⣄⣸⣃⠀⠀⠀⠀⣸⣧⣼⣿⠟⠓⠶⠶⠶⠾⠛⠛⠛⠛⠉⠉⠀⠀⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠉⠀⠀",
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠙⠛⠛⠛⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
 ]
+RACCOON_ART = [line.replace("⠀", " ") for line in RACCOON_ART]
 RACCOON_SAYINGS = ["*rustles through trash*", "chitter chitter!", "*washes paws*", "ooh, shiny...", "*peeks out from the mask*"]
 RACCOON_FED = ["yoink, thanks!", "*happily hoards it*", "chirr~ <3"]
 
