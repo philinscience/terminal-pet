@@ -10,6 +10,7 @@ whichever shell you end up using — harmless if you only ever use one.
 import os
 
 HOOK_DIR = os.path.expanduser("~/.terminal_pet")
+MARKER = "# terminal pet: react to commands you run"
 
 ZSH_HOOK_PATH = os.path.join(HOOK_DIR, "hook.zsh")
 ZSHRC = os.path.expanduser("~/.zshrc")
@@ -57,8 +58,6 @@ case ";$PROMPT_COMMAND;" in
 esac
 """
 
-MARKER = "# terminal pet: react to commands you run"
-
 
 def _install(hook_path, hook_content, rc_path, rc_label):
     with open(hook_path, "w") as f:
@@ -85,6 +84,34 @@ def run():
     _install(ZSH_HOOK_PATH, ZSH_HOOK_CONTENT, ZSHRC, "~/.zshrc")
     _install(BASH_HOOK_PATH, BASH_HOOK_CONTENT, BASHRC, "~/.bashrc")
     print("Open a new terminal session (or `source ~/.zshrc` / `source ~/.bashrc`) to activate it.")
+
+
+def install():
+    run()
+
+
+def is_installed():
+    status = {}
+    for shell_name, hook_path, rc_path in (
+        ("zsh", ZSH_HOOK_PATH, ZSHRC),
+        ("bash", BASH_HOOK_PATH, BASHRC),
+    ):
+        source_line = f"source '{hook_path}'"
+        rc_has_source = False
+        if os.path.exists(rc_path):
+            try:
+                with open(rc_path) as f:
+                    rc_has_source = source_line in f.read()
+            except OSError:
+                rc_has_source = False
+        status[shell_name] = {
+            "hook_exists": os.path.exists(hook_path),
+            "rc_exists": os.path.exists(rc_path),
+            "rc_has_source": rc_has_source,
+            "hook_path": hook_path,
+            "rc_path": rc_path,
+        }
+    return status
 
 
 def _uninstall_rc(hook_path, rc_path, rc_label):

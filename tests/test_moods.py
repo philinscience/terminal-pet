@@ -96,6 +96,44 @@ def test_large_pet_wiggles_slower_at_night(monkeypatch):
     assert night_offset == -1
 
 
+def test_idle_pet_becomes_sleepy_during_day(monkeypatch):
+    monkeypatch.setattr(pet.time, "localtime", lambda: _struct_time(hour=14, month=6, day=15))
+    p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
+    p.idle_ticks = pet.IDLE_SLEEP_TICKS
+    assert p._is_sleepy() is True
+    pool = p._chatter_pool()
+    assert set(pet.SLEEPY_SAYINGS) <= set(pool)
+
+
+def test_activity_wakes_sleepy_pet(tmp_path, monkeypatch):
+    monkeypatch.setattr(pet.time, "localtime", lambda: _struct_time(hour=14, month=6, day=15))
+    cmd_file = tmp_path / "lastcmd"
+    monkeypatch.setattr(pet, "CMD_FILE", str(cmd_file))
+
+    p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
+    p.idle_ticks = pet.VERY_SLEEPY_TICKS
+    cmd_file.write_text("git status")
+    p.check_command()
+
+    assert p.idle_ticks == 0
+    assert p._is_sleepy() is False
+
+
+def test_large_pet_wiggles_slower_when_very_sleepy_during_day(monkeypatch):
+    monkeypatch.setattr(pet.time, "localtime", lambda: _struct_time(hour=14, month=6, day=15))
+    lively_pet = pet.Pet("bunny", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
+    lively_pet.tick = 15
+    lively_offset = lively_pet.y_offset()
+
+    sleepy_pet = pet.Pet("bunny", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
+    sleepy_pet.idle_ticks = pet.VERY_SLEEPY_TICKS
+    sleepy_pet.tick = 15
+    sleepy_offset = sleepy_pet.y_offset()
+
+    assert lively_offset == 0
+    assert sleepy_offset == -1
+
+
 def test_golden_pet_always_spawns_when_forced(monkeypatch):
     monkeypatch.setattr(random, "random", lambda: 0.0)  # below GOLDEN_CHANCE
     p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[])
@@ -126,3 +164,16 @@ def test_star_spawns_and_crosses_and_despawns(monkeypatch):
         p._update_star()
     assert p.star_x is None  # despawned after crossing max_x
     assert p.star_y is None
+
+
+def test_special_dates_can_be_disabled(monkeypatch):
+    monkeypatch.setattr(pet.time, "localtime", lambda: _struct_time(month=10, day=31))
+    p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[], settings={"enable_seasonal": False})
+    assert p.festive is False
+
+
+def test_encouragements_can_be_disabled(monkeypatch):
+    monkeypatch.setattr(pet.time, "localtime", lambda: _struct_time(hour=14, month=6, day=15))
+    p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[], settings={"enable_encouragements": False})
+    pool = p._chatter_pool()
+    assert not set(pet.ENCOURAGEMENTS) & set(pool)

@@ -10,6 +10,8 @@ import re
 import sys
 import time
 
+from .config import DEFAULT_CONFIG
+
 try:
     import curses
 except ImportError:
@@ -226,6 +228,8 @@ BUBBLE_PALETTE_8 = [COLOR_CYAN, COLOR_MAGENTA, COLOR_YELLOW, COLOR_GREEN, COLOR_
 SLEEPY_SAYINGS = ["*yawns*", "zzz...", "getting sleepy...", "*rubs eyes*", "past my bedtime..."]
 NIGHT_START_HOUR = 23  # from 11pm...
 NIGHT_END_HOUR = 6  # ...to 6am, the pet gets sleepy: fewer chatter lines, more idling, slower wiggle.
+IDLE_SLEEP_TICKS = 220
+VERY_SLEEPY_TICKS = 520
 
 # (month, day) -> flavor for that one day of the year. Takes priority over
 # the sleepy/encouragement pools, and gives the pet a themed color for the
@@ -247,10 +251,20 @@ STAR_SPEED = 2.5
 STAR_ROW_FRACTION = 0.15  # a shooting star crosses near the top of the screen
 
 
+CHATTER_MULTIPLIERS = {
+    "quiet": 0.35,
+    "normal": 1.0,
+    "chaos": 2.2,
+}
+
+
 class Pet:
-    def __init__(self, kind, max_x, max_y, speed, bubble_pairs):
+    def __init__(self, kind, max_x, max_y, speed, bubble_pairs, settings=None):
         self.kind = kind
         self.spec = PETS[kind]
+        self.settings = dict(DEFAULT_CONFIG)
+        if settings:
+            self.settings.update(settings)
         self.large = self.spec.get("size") == "large"
         art = self.spec["art"]
         self.width = max(len(line) for line in art)
@@ -277,8 +291,9 @@ class Pet:
         self._cmd_mtime = None
         self._exit_mtime = None
         self.last_cmd = ""
+        self.idle_ticks = 0
 
-        self.golden = random.random() < GOLDEN_CHANCE
+        self.golden = self.settings["enable_sparkles"] and random.random() < GOLDEN_CHANCE
         self.special_info = self._special_date_info()
         self.festive = self.special_info is not None
         self.star_x = None
@@ -295,6 +310,8 @@ class Pet:
         return NIGHT_START_HOUR <= hour < NIGHT_END_HOUR
 
     def _special_date_info(self):
+        if not self.settings["enable_seasonal"]:
+            return None
         now = time.localtime()
         return SPECIAL_DATES.get((now.tm_mon, now.tm_mday))
 
@@ -302,11 +319,23 @@ class Pet:
         pool = list(self.spec["sayings"])
         if self.festive:
             pool += self.special_info["sayings"]
-        elif self._is_night():
+        elif self._is_sleepy():
             pool += SLEEPY_SAYINGS
-        else:
+        elif self.settings["enable_encouragements"]:
             pool += ENCOURAGEMENTS
         return pool
+
+    def _chatter_chance(self, base):
+        return base * CHATTER_MULTIPLIERS[self.settings["chattiness"]]
+
+    def _is_sleepy(self):
+        return self._is_night() or self.idle_ticks >= IDLE_SLEEP_TICKS
+
+    def _is_very_sleepy(self):
+        return self.idle_ticks >= VERY_SLEEPY_TICKS
+
+    def _wake_up(self):
+        self.idle_ticks = 0
 
     def _set_bubble(self, text, timer):
         self.bubble = text
@@ -329,6 +358,7 @@ class Pet:
         if not cmd:
             return
         self.last_cmd = cmd
+        self._wake_up()
         for pattern, options in COMMAND_REACTIONS:
             if pattern.search(cmd):
                 self._set_bubble(random.choice(options), 16)
@@ -350,19 +380,28 @@ class Pet:
         except (OSError, ValueError):
             return
         if code == 0:
+            self._wake_up()
             return
 
         first_word = self.last_cmd.split()[0] if self.last_cmd else ""
         if code == 127:
-            suggestion = _suggest_command(first_word)
+            if self.settings["enable_typo_help"]:
+                suggestion = _suggest_command(first_word)
+            else:
+                suggestion = None
             if suggestion:
                 text = random.choice(SUGGESTION_TEMPLATES).format(suggestion)
+            elif self.settings["enable_roasts"]:
+                text = random.choice(ROAST_LINES)
             else:
                 text = random.choice(TYPO_FALLBACKS)
         else:
+            if not self.settings["enable_roasts"]:
+                return
             text = random.choice(ROAST_LINES)
 
         self._set_bubble(text, 18)
+        self._wake_up()
         self.state = "sit"
         self.state_timer = 18
 
@@ -377,12 +416,15 @@ class Pet:
             self.x = min(self.x, max(0, max_x - self.width - 1))
 
     def feed(self):
+        self._wake_up()
         self._set_bubble(random.choice(self.spec["fed"]), 14)
-        self.sparkle = True
+        self.sparkle = self.settings["enable_sparkles"]
         self.state = "sit"
         self.state_timer = 14
 
     def _update_star(self):
+        if not self.settings["enable_sparkles"]:
+            return
         if self.star_x is None:
             if random.random() < STAR_CHANCE_PER_TICK:
                 self.star_x = 0.0
@@ -395,6 +437,7 @@ class Pet:
 
     def update(self):
         self.tick += 1
+        self.idle_ticks += 1
         self.check_command()
         self.check_exit()
         self._update_star()
@@ -408,7 +451,7 @@ class Pet:
         if self.large:
             # stays put and gently wiggles in place; still reacts to
             # commands/feeding via speech bubble, just never walks.
-            if self.bubble is None and random.random() < 0.015:
+            if self.bubble is None and random.random() < self._chatter_chance(0.015):
                 self._set_bubble(random.choice(self._chatter_pool()), 10)
             return
 
@@ -420,14 +463,18 @@ class Pet:
             return
 
         # occasionally stop to sit/idle — sleepier (idles more) late at night
-        sit_chance = 0.03 if self._is_night() else 0.01
-        if random.random() < sit_chance:
+        sit_chance = 0.01
+        if self._is_sleepy():
+            sit_chance = 0.03
+        if self._is_very_sleepy():
+            sit_chance = 0.06
+        if random.random() < self._chatter_chance(sit_chance):
             self.state = "sit"
-            self.state_timer = random.randint(15, 40)
+            self.state_timer = random.randint(25, 55) if self._is_very_sleepy() else random.randint(15, 40)
             return
 
         # occasionally say something (species chatter, encouragement, or a mood-appropriate line)
-        if self.bubble is None and random.random() < 0.015:
+        if self.bubble is None and random.random() < self._chatter_chance(0.015):
             self._set_bubble(random.choice(self._chatter_pool()), 10)
 
         self.x += self.direction * self.speed
@@ -446,7 +493,11 @@ class Pet:
         if self.large:
             # slow, gentle bob — independent of walk/sit state, since large
             # pets never walk. Slower still late at night (drowsy).
-            cadence = 20 if self._is_night() else 10
+            cadence = 10
+            if self._is_sleepy():
+                cadence = 20
+            if self._is_very_sleepy():
+                cadence = 28
             return -1 if (self.tick // cadence) % 2 == 0 else 0
         if self.state == "walk" and (self.tick // 6) % 2 == 0:
             return -1
@@ -555,48 +606,69 @@ def main(stdscr, kind, speed):
         draw(stdscr, pet, pet_pair)
 
 
-def parse_args():
-    p = argparse.ArgumentParser(description="A little pet that wanders around your terminal.")
-    p.add_argument("--pet", choices=[*PETS.keys(), "random"], default="random")
-    p.add_argument("--speed", type=float, default=1.0, help="higher = faster (default 1.0)")
-    p.add_argument(
-        "--dock",
-        action="store_true",
-        help="launch docked in a small pane/window instead of taking over this one",
-    )
-    p.add_argument(
-        "--dock-height",
-        type=float,
-        default=15.0,
-        metavar="PERCENT",
-        help="iTerm2 only: dock pane height as %% of window height (default 15)",
-    )
-    return p.parse_args()
+def run_curses(kind, speed, settings=None):
+    try:
+        curses.wrapper(main_with_settings, kind, speed, settings or dict(DEFAULT_CONFIG))
+    except KeyboardInterrupt:
+        pass
+
+
+def main_with_settings(stdscr, kind, speed, settings):
+    curses.curs_set(0)
+    curses.flushinp()  # discard stray bytes buffered by shell/prompt startup so they don't misread as keypresses
+    stdscr.nodelay(True)
+    stdscr.timeout(max(20, int(120 / speed)))
+
+    max_y, max_x = stdscr.getmaxyx()
+    pet_instance = Pet(kind, max_x, max_y, speed=1.0, bubble_pairs=[], settings=settings)
+
+    pet_pair = 1
+    bubble_pairs = []
+    if curses.has_colors():
+        curses.start_color()
+        curses.use_default_colors()
+        use_256 = curses.COLORS >= 256
+
+        if pet_instance.golden:
+            pet_color = GOLDEN_COLOR256 if use_256 else GOLDEN_COLOR8
+        elif pet_instance.special_info:
+            pet_color = pet_instance.special_info["color256"] if use_256 else pet_instance.special_info["color8"]
+        else:
+            pet_color = PETS[kind]["color256"] if use_256 else PETS[kind]["color8"]
+        curses.init_pair(pet_pair, pet_color, -1)
+
+        palette = BUBBLE_PALETTE_256 if use_256 else BUBBLE_PALETTE_8
+        for i, color in enumerate(palette, start=2):
+            curses.init_pair(i, color, -1)
+            bubble_pairs.append(i)
+
+        pet_instance.bubble_pairs = bubble_pairs
+        if pet_instance.bubble and bubble_pairs:
+            pet_instance.bubble_pair = random.choice(bubble_pairs)
+
+    while True:
+        ch = stdscr.getch()
+        if ch in (ord("q"), ord("Q")):
+            break
+        elif ch == curses.KEY_RESIZE:
+            max_y, max_x = stdscr.getmaxyx()
+            pet_instance.resize(max_x, max_y)
+        elif ch in (ord("f"), ord("F")):
+            pet_instance.feed()
+
+        pet_instance.update()
+        draw(stdscr, pet_instance, pet_pair)
 
 
 def run():
-    args = parse_args()
-
-    kind = args.pet
-    if kind == "random":
-        kind = random.choice(list(PETS.keys()))
-
-    if args.dock:
-        from . import dock
-
-        dock.launch(kind, args.speed, args.dock_height)
-        return
-
     if curses is None:
         print("terminal-pet needs Python's `curses` module, which isn't available here.")
         print("On Windows, install it with: pip install windows-curses")
         sys.exit(1)
 
     locale.setlocale(locale.LC_ALL, "")
-    try:
-        curses.wrapper(main, kind, args.speed)
-    except KeyboardInterrupt:
-        pass
+    kind = random.choice(list(PETS.keys()))
+    run_curses(kind, 1.0, dict(DEFAULT_CONFIG))
 
 
 if __name__ == "__main__":

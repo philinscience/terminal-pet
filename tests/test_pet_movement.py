@@ -92,6 +92,19 @@ def test_feed_sets_bubble_and_sparkle():
     assert p.state == "sit"
 
 
+def test_feed_respects_sparkle_setting():
+    p = pet.Pet(
+        "duck",
+        max_x=100,
+        max_y=50,
+        speed=1.0,
+        bubble_pairs=[2, 3],
+        settings={"enable_sparkles": False},
+    )
+    p.feed()
+    assert p.sparkle is False
+
+
 def test_check_command_sets_bubble_on_reaction(tmp_path, monkeypatch):
     cmd_file = tmp_path / "lastcmd"
     monkeypatch.setattr(pet, "CMD_FILE", str(cmd_file))
@@ -151,3 +164,15 @@ def test_check_exit_127_suggests_fix(tmp_path, monkeypatch):
     p.check_exit()
 
     assert "git" in p.bubble
+
+
+def test_check_exit_127_respects_disabled_typo_help(tmp_path, monkeypatch):
+    exit_file = tmp_path / "lastexit"
+    monkeypatch.setattr(pet, "EXIT_FILE", str(exit_file))
+
+    p = pet.Pet("duck", max_x=100, max_y=50, speed=1.0, bubble_pairs=[], settings={"enable_typo_help": False})
+    p.last_cmd = "gti status"
+    exit_file.write_text("127")
+    p.check_exit()
+
+    assert p.bubble in pet.TYPO_FALLBACKS + pet.ROAST_LINES

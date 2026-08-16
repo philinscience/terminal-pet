@@ -13,14 +13,19 @@ fails for real, and throws in random encouragement.
 
 ```
 pip install -e .
-terminal-pet-install-hook   # teaches it to watch your commands (one-time)
-terminal-pet --dock         # docks it, keep working normally
+terminal-pet setup          # one-time guided setup + hook install
+terminal-pet                # launches using your saved defaults
 ```
 
 Open a new terminal tab (or `source ~/.zshrc` / `source ~/.bashrc`) and type a typo to see it in action.
 
 `--pet duck`, `--pet mouse`, `--pet bunny`, or `--pet raccoon` picks the species.
 `q` quits, `f` feeds it.
+
+Useful commands:
+- `terminal-pet check` verifies hook install, terminal support, and config/state access.
+- `terminal-pet setup --yes --pet raccoon --chattiness chaos` skips prompts and saves defaults directly.
+- `terminal-pet --no-roasts --chattiness quiet` lets you override your saved personality just for one run.
 
 Pets come in two sizes:
 - **Small** (duck, mouse): wander back and forth, docked in a small pane
@@ -53,6 +58,11 @@ Pets come in two sizes:
   small pets only), install `pip install -e ".[iterm]"` and enable Settings >
   General > Magic > "Enable Python API". Without it, `--dock` still works,
   just as a plain 50/50 split.
+- Personality settings live in `~/.terminal_pet/config.json`. You can tune
+  `quiet`, `normal`, or `chaos`, plus toggle encouragements, roasts, typo
+  help, seasonal reactions, and sparkle effects.
+- Pets now also get sleepy from a quiet session, not just the late hour. Run
+  a command or feed them and they perk back up.
 - The hook stores your last command + exit code as plain text in
   `~/.terminal_pet/` so the pet can read them — worth knowing if a command
   ever contains a secret inline.

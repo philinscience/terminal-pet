@@ -28,7 +28,7 @@ iterm = ["iterm2"]
 dev = ["pytest>=7"]
 
 [project.scripts]
-terminal-pet = "terminal_pet.pet:run"
+terminal-pet = "terminal_pet.cli:main"
 terminal-pet-install-hook = "terminal_pet.hook:run"
 terminal-pet-uninstall-hook = "terminal_pet.hook:uninstall"
 
