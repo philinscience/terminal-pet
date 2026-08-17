@@ -238,7 +238,7 @@ def _run_inline(pet_argv):
     print("Running the pet directly in this window instead.")
     from . import cli
 
-    cli.main(["run", *pet_argv])
+    cli.main(["run", "--no-dock", *pet_argv])
 
 
 def _launch_large_window(pet, pet_argv):

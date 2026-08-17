@@ -83,4 +83,4 @@ def test_run_inline_uses_cli_with_pet_args(monkeypatch):
     monkeypatch.setattr(real_cli, "main", lambda argv: calls.append(argv))
     dock._run_inline(["--pet", "duck", "--speed", "1.0"])
 
-    assert calls == [["run", "--pet", "duck", "--speed", "1.0"]]
+    assert calls == [["run", "--no-dock", "--pet", "duck", "--speed", "1.0"]]
