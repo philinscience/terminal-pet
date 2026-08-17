@@ -236,10 +236,9 @@ def _run_inline(pet_argv):
     else:
         print("Not inside a tmux session — start one with `tmux` and rerun --dock for a docked pane.")
     print("Running the pet directly in this window instead.")
-    sys.argv = ["terminal-pet", *pet_argv]
-    from . import pet as pet_module
+    from . import cli
 
-    pet_module.run()
+    cli.main(["run", *pet_argv])
 
 
 def _launch_large_window(pet, pet_argv):

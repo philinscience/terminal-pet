@@ -56,6 +56,12 @@ def _add_run_arguments(parser):
         help="launch docked in a small pane/window instead of taking over this one",
     )
     parser.add_argument(
+        "--no-dock",
+        dest="dock",
+        action="store_false",
+        help="run in the current terminal even if docking is enabled in saved defaults",
+    )
+    parser.add_argument(
         "--dock-height",
         type=float,
         default=15.0,

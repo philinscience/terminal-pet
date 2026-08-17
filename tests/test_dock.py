@@ -70,3 +70,17 @@ def test_launch_tmux_window_names_pane(monkeypatch):
     dock._launch_tmux_window(["--pet", "bunny"])
 
     assert calls == [["tmux", "new-window", "-d", "-n", "pet", "terminal-pet --pet bunny"]]
+
+
+def test_run_inline_uses_cli_with_pet_args(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(dock.sys, "platform", "linux")
+    monkeypatch.setattr(dock.shutil, "which", lambda name: None)
+
+    import terminal_pet.cli as real_cli
+
+    monkeypatch.setattr(real_cli, "main", lambda argv: calls.append(argv))
+    dock._run_inline(["--pet", "duck", "--speed", "1.0"])
+
+    assert calls == [["run", "--pet", "duck", "--speed", "1.0"]]

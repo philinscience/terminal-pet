@@ -40,6 +40,28 @@ def test_merge_runtime_config_overrides_file_values(monkeypatch):
     assert runtime["enable_roasts"] is False
 
 
+def test_no_dock_flag_overrides_saved_default(monkeypatch):
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: {
+            "default_pet": "mouse",
+            "default_speed": 1.0,
+            "default_dock": True,
+            "chattiness": "normal",
+            "enable_encouragements": True,
+            "enable_roasts": True,
+            "enable_typo_help": True,
+            "enable_seasonal": True,
+            "enable_sparkles": True,
+        },
+    )
+    args = cli.parse_args(["--pet", "raccoon", "--no-dock"])
+    runtime = cli._merge_runtime_config(args)
+    assert runtime["default_pet"] == "raccoon"
+    assert runtime["default_dock"] is False
+
+
 def test_get_doctor_report_includes_hook_and_terminal(monkeypatch):
     monkeypatch.setattr(
         cli.hook,
