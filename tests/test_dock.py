@@ -14,7 +14,7 @@ def test_pet_command_quotes_paths_with_spaces(monkeypatch):
 def test_pet_command_falls_back_to_module_invocation(monkeypatch):
     monkeypatch.setattr(dock.shutil, "which", lambda name: None)
     cmd = dock._pet_command(["--pet", "bunny"])
-    assert "terminal_pet.pet" in cmd
+    assert "terminal_pet.cli" in cmd
     assert "--pet bunny" in cmd
 
 

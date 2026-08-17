@@ -144,7 +144,7 @@ def _large_window_size(pet):
 
 def _pet_command(pet_argv):
     exe = shutil.which("terminal-pet")
-    parts = [exe] if exe else [sys.executable, "-m", "terminal_pet.pet"]
+    parts = [exe] if exe else [sys.executable, "-m", "terminal_pet.cli"]
     parts += pet_argv
     return " ".join(shlex.quote(p) for p in parts)
 
